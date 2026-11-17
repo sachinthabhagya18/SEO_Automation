@@ -1,0 +1,13 @@
+.env
+.local
+.venv
+.git
+node_modules
+__pycache__
+uploads
+backups
+*.log
+*.log
+
+**/__pycache__
+**/*.pyc

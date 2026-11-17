@@ -1,0 +1,6 @@
+{% extends 'base.html' %}{% block content %}<section class="panel mx-auto mt-12 max-w-lg p-8">
+    <h1 class="mb-4 text-2xl font-bold">Set up your account</h1>
+    <p class="mb-6 text-sm text-slate-500">Choose a strong password. This invitation works once.</p>
+    <form method="post" class="space-y-5">{% csrf_token %}{{ form.as_p }}<button class="btn">Set password</button>
+    </form>
+</section>{% endblock %}

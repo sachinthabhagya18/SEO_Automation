@@ -1,0 +1,63 @@
+{% extends 'base.html' %}{% block breadcrumb %}{{ site.name }} / Review{% endblock %}{% block content %}<a
+    class="text-sm text-teal-700" href="{% url 'change-list' site.pk %}">Back to metadata drafts</a>
+<div x-data="changeProgress('{% url "change-status" site.pk change.pk %}', '{{ change.state|escapejs }}')" class="mb-6 mt-5 flex flex-wrap items-center justify-between gap-4">
+    <h1 class="text-3xl font-bold">Review metadata change</h1><span
+        class="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold" x-text="state">{{ change.state }}</span><p class="w-full text-sm text-teal-800" aria-live="polite" x-text="notice"></p>
+</div>
+<p class="mb-2 break-all text-sm text-slate-500">{{ change.page.url }}</p>
+<p class="mb-6 text-sm text-slate-500">Created by {% if change.created_by.is_service_account %}Draft Assistant (human approval required){% else %}{{ change.created_by.email }}{% endif %} · {{ change.provider }} · WordPress ID
+    {{ change.page.wordpress_id }}</p>
+<section class="panel mb-6 p-6"><h2 class="font-semibold">Where these tags will be saved</h2><p class="mt-3 text-sm">Target: <strong>{{ site.name }}</strong> ({{ site.environment }}) ? WordPress {{ change.page.post_type }} #{{ change.page.wordpress_id }}</p><p class="mt-2 break-all text-sm">{{ change.page.url }}</p><p class="mt-3 text-sm text-slate-500">Approval permits this exact target and diff. The worker saves {% if change.page.target_kind == "home" %}WordPress options: <code>_cseo_home_title</code> and <code>_cseo_home_description</code>.{% elif change.page.target_kind == "category" %}WordPress term metadata: <code>_cseo_title</code> and <code>_cseo_description</code>.{% else %}native WordPress post metadata: <code>_cseo_title</code> and <code>_cseo_description</code>.{% endif %} The connector renders them inside this URL's HTML head as <code>&lt;title&gt;</code> and <code>&lt;meta name="description"&gt;</code>, with social-tag fallbacks. The visible product name, heading, price and stock are unchanged.</p><p class="mt-3 text-sm text-slate-500">Draft ? approval ? queue ? WordPress save ? fetch actual HTML ? verified. A preview alone does not publish. Google may show changes later after recrawling.</p>{% if self_review and change.state == 'pending_review' %}<p role="alert" class="mt-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">Approval is blocked because you created or last edited this draft. Submit it to another authorized reviewer. Your submit action did not save an approval or start publication.</p>{% endif %}{% if not write_scope %}<p class="mt-4 text-sm text-amber-800">This is not an enabled test target. Approving here does not publish to production. Use the related test copy to validate a separate target-bound draft.</p>{% endif %}{% if change.state == 'approved' %}<p class="mt-4 text-sm text-teal-800">Approval saved. {% if site.paused %}Website writes are paused. Choose Apply / retry approved test draft to enable this test copy and queue the existing approved diff (automation-management permission required).{% else %}Choose Apply approved test draft to queue it.{% endif %}</p>{% endif %}<ul class="mt-4 space-y-2 text-sm">{% for attempt in attempts %}<li>Worker {{ attempt.operation }}: <strong>{{ attempt.state }}</strong>{% if attempt.error_code %} ? {{ attempt.error_code }}{% endif %}</li>{% endfor %}</ul></section><section class="panel overflow-x-auto">
+    <table class="w-full text-left text-sm">
+        <caption class="p-6 text-left text-lg font-semibold">Proposed field diff</caption>
+        <thead class="bg-slate-50">
+            <tr>
+                <th class="p-4">Field</th>
+                <th class="p-4">Current saved value</th>
+                <th class="p-4">Proposal</th>
+            </tr>
+        </thead>
+        <tbody>{% if change.change_title %}<tr class="border-t border-slate-100">
+                <th class="p-4">SEO title</th>
+                <td class="p-4">{{ change.base_metadata.title|default:'No override' }}</td>
+                <td class="p-4">{{ change.proposed_title }}</td>
+            </tr>{% endif %}{% if change.change_description %}<tr class="border-t border-slate-100">
+                <th class="p-4">Description</th>
+                <td class="p-4">{{ change.base_metadata.description|default:'Not set' }}</td>
+                <td class="p-4">{{ change.proposed_description }}</td>
+            </tr>{% endif %}</tbody>
+    </table>
+</section>
+<section class="panel mt-6 p-6">
+    <h2 class="font-semibold">Reason and evidence</h2>
+    <p class="mt-3 text-sm leading-6">{{ change.reason }}</p>
+    <ul class="mt-4 space-y-3 text-sm">{% for source in change.sources.all %}<li><strong>{{ source.title }}</strong> ·
+            {{ source.source_type }}<p class="break-all text-xs text-slate-500">{{ source.url }} · {{ source.fetched_at }}</p>
+            <p class="mt-1">{{ source.excerpt }}</p>
+        </li>{% empty %}<li class="text-amber-800">No evidence selected; add sources before submission.</li>{% endfor %}
+    </ul>
+</section>
+<section class="panel mt-6 p-6">
+    <h2 class="font-semibold">Controls</h2>
+    <p class="my-3 text-sm text-slate-500">Self-approval is forbidden by default. A separate authorized reviewer must
+        approve. Test-target publication requires this exact approval and current WordPress revision; production is disabled.</p>{% if change.error_code %}<p role="alert" class="mb-4 text-sm text-red-700">{{ change.error_code }}</p>{% endif %}<div
+        class="flex flex-wrap gap-3">{% if can_edit %}{% if change.state == 'draft' or change.state == 'pending_review' or change.state == 'approved' or change.state == 'rejected' or change.state == 'stale_conflict' %}<a
+            class="btn-secondary" href="{% url 'change-edit' site.pk change.pk %}">Edit / invalidate approval</a>{% endif %}{% endif %}{% if change.state == 'draft' and can_submit %}<form method="post"
+            action="{% url 'change-action' site.pk change.pk %}">{% csrf_token %}<input type="hidden" name="operation"
+                value="submit"><button class="btn">Submit for review</button></form>{% endif %}{% if change.state == 'pending_review' and can_test %}<form method="post" action="{% url 'change-action' site.pk change.pk %}">{% csrf_token %}<input type="hidden" name="operation" value="approve_test"><button class="btn">Approve &amp; run on test copy</button><p class="mt-2 text-xs text-slate-500">Applies only to {{ site.url }}. Production stays unchanged.</p></form>{% endif %}{% if change.state == 'pending_review' and can_approve and not can_test %}<form method="post" action="{% url 'change-action' site.pk change.pk %}">{% csrf_token %}<input type="hidden" name="operation" value="approve"><button class="btn">Approve exact
+                diff</button></form>
+        <form method="post" action="{% url 'change-action' site.pk change.pk %}">{% csrf_token %}<input type="hidden"
+                name="operation" value="reject"><button class="btn-secondary">Reject</button></form>{% endif %}{% if can_publish %}{% if change.state == 'approved' or change.state == 'retryable_failure' or change.state == 'ambiguous_remote_result' %}<form method="post"
+            action="{% url 'change-action' site.pk change.pk %}">{% csrf_token %}<input type="hidden" name="operation"
+                value="publish"><button class="btn-secondary">Apply / retry approved test draft</button></form>{% endif %}{% endif %}{% if change.state == 'verified' or change.state == 'verification_failed' %}{% if can_restore %}<form method="post"
+            action="{% url 'change-action' site.pk change.pk %}">{% csrf_token %}<input type="hidden" name="operation"
+                value="restore"><button class="btn-secondary">Restore test metadata</button></form>{% endif %}{% endif %}{% if change.state == 'verification_failed' or change.state == 'applied_pending_verification' or change.state == 'restoration_failed' %}<form method="post" action="{% url 'change-action' site.pk change.pk %}">
+            {% csrf_token %}<input type="hidden" name="operation" value="verify"><button class="btn-secondary">Retry
+                public verification only</button></form>{% endif %}<a class="btn-secondary"
+            href="{% url 'change-detail' site.pk change.pk %}">Refresh status</a>
+    </div>
+</section>{% if change.verification %}<section class="panel mt-6 p-6">
+    <h2 class="font-semibold">Public verification</h2>
+    <p class="mt-3 text-sm">Operation: {{ change.verification.operation }} · {{ change.verification.checked_at }}</p>
+    <p class="mt-2 text-sm">{% if change.verification.errors %}{{ change.verification.errors|join:', ' }}{% else %}Expected HTML output verified.{% endif %}</p>
+</section>{% endif %}{% endblock %}

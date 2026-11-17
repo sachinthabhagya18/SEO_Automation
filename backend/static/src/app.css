@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+@source '../../templates';
+@theme { --font-sans: 'Segoe UI', system-ui, sans-serif; }
+@layer base {
+  body { @apply bg-slate-50 text-slate-800 antialiased; }
+  input:not([type=checkbox]), select, textarea { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm shadow-sm; }
+  input:focus, select:focus, textarea:focus { @apply outline-2 outline-offset-2 outline-teal-600; }
+  label { @apply mb-2 block text-sm font-semibold text-slate-700; }
+  button, a { @apply focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-600; }
+  [x-cloak] { display: none !important; }
+}
+@layer components {
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800; }
+  .btn-secondary { @apply inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50; }
+  .panel { @apply rounded-xl border border-slate-200 bg-white shadow-xs; }
+  .eyebrow { @apply text-xs font-bold uppercase tracking-widest text-slate-500; }
+  .errorlist { @apply my-2 list-inside list-disc text-sm text-red-700; }
+  .helptext { @apply mt-2 block text-xs leading-5 text-slate-500; }
+}

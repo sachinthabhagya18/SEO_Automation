@@ -1,0 +1,10 @@
+{
+  "name": "seo-automation-ui",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "tailwindcss -i backend/static/src/app.css -o backend/static/dist/app.css --minify && node scripts/copy-assets.mjs"
+  },
+  "dependencies": {"alpinejs": "3.15.8"},
+  "devDependencies": {"@tailwindcss/cli": "4.2.1", "tailwindcss": "4.2.1"}
+}

@@ -1,0 +1,354 @@
+SEO Automation Platform — Complete VS Code Implementation Prompt
+Version: 2026-11-16. This is an implementation specification, not a claim that the application has already been built or tested.
+
+Save this file in your VS Code project root. Ask the coding agent to read it completely, preserve it as the product specification, create a milestone plan, and start implementing. Use agent capabilities with workspace editing and terminal access. Credentials and external-account approvals remain user setup steps. Do not paste secrets into this document.
+START OF IMPLEMENTATION PROMPT
+You are the implementation engineer for my company's AI SEO Automation Platform. Build the real working application in the current workspace. Do not stop at an architecture explanation, mock dashboard, or code snippets. Work incrementally, test meaningful milestones, and maintain an honest record of what works and what is blocked by external setup.
+1. Product objective and operating context
+We build and maintain WordPress websites using both custom-coded themes and Elementor. We need one internal platform to manage SEO for multiple websites, each with its own dashboard, staff permissions, business knowledge, reference websites, keyword strategy, automation policies, history, and results.
+
+The product must support the lifecycle: onboard a website; connect WordPress; collect evidence; research supplied reference/competitor websites; discover and cluster keyword candidates; audit; prioritize; generate grounded changes; review; publish supported changes; verify rendered output; recover when necessary; track search performance and conversions.
+
+The user has Docker installed on a Windows development computer and uses VS Code. Detect the actual shell and Docker availability. Provide PowerShell-compatible onboarding alongside container commands. Do not assume host Python, PHP, PostgreSQL, Redis, or Node are installed. Prefer containers for consistent execution. Never reset or overwrite unrelated repositories, Docker volumes, databases, or existing user work.
+
+Initial product is an internal company tool, not a public SaaS signup service. Architect site-scoped data cleanly for future expansion. Do not implement billing or public registration unless requested. Use Asia/Colombo as the default display/schedule timezone, store timezone-aware timestamps in UTC, and permit per-site timezones.
+2. Fixed architecture choices
+- Backend: a supported stable Django release plus Django REST Framework.
+- UI: Django Templates + compiled Tailwind CSS + Alpine.js. No Vue, React, Next.js, or duplicate frontend frameworks in this version.
+- PostgreSQL: application persistence; do not silently substitute SQLite for integration testing.
+- Celery + Redis: asynchronous jobs, controlled retries, locks and temporary caches. PostgreSQL is authoritative for business job state.
+- n8n: external workflow coordination and schedules through authenticated Django APIs. n8n must not write directly into application database tables.
+- Docker Compose: reproducible local services, health checks and persistent volumes.
+- WordPress PHP plugin: our own standalone SEO rendering and connector plugin. Yoast, Rank Math and paid SEO plugins are NOT prerequisites.
+- AI: a provider adapter interface; implement at least one live provider end to end, initially Gemini unless project credentials/preferences indicate another. Use current official SDK documentation. Add provider interfaces for Claude/OpenAI without pretending unimplemented adapters work. Model IDs must be configuration values, not claims about an eternally latest/best model.
+- AI workflow: implement a checkpointed LangGraph flow for evidence -> draft -> validation -> review state. Celery owns executing jobs; LangGraph owns only the inner AI workflow state, not scheduling or arbitrary publishing. Establish a simple deterministic vertical slice before adding orchestration. LangChain components are optional; CrewAI is not a dependency.
+- Crawling: Python HTTP client + HTML parser; optional isolated Playwright worker for selected JS-rendered pages. Do not render every page through a browser by default.
+- Charts: a small maintained chart library with accessible table alternatives.
+- Persistence for uploaded reports/snapshots: persistent local volume initially, storage interface for S3-compatible storage later.
+Verify compatible versions using official documentation, pin dependencies and images, commit lockfiles, and record the tested compatibility matrix. Do not use floating latest tags for reproducibility.
+3. Implementation behavior and scope tracking
+Inspect the existing workspace and instructions before changing anything. Extend existing working code instead of creating a second disconnected project. Record decisions, required configuration, assumptions and unresolved questions. Create docs/IMPLEMENTATION_PLAN.md with a traceability checklist mapping every section of this specification to implementation, tests, or a clearly named blocked/deferred item.
+
+Create docs/STATUS.md with current milestone, completed behavior, exact checks run, failures, external blockers and next step. Update it at milestone boundaries so a new session can continue without rebuilding completed work. Do not silently shrink the full specification to the initial MVP. Clearly distinguish implemented, verified locally, externally unverified, blocked and deferred features.
+
+Continue authorized local coding, migrations, reversible test setup and testing without asking for confirmation at each ordinary step. Ask only when an unresolved decision materially changes behavior or an external credential/action is required. Keep implementing independent work while integrations lack credentials. Do not deploy publicly or change real customer sites just because this prompt authorizes local development. Use local disposable WordPress fixtures and later an explicitly selected staging site.
+4. Users, authentication and role-based authorization
+Required business roles:
+1. Super Admin: company owner; manages staff, roles, websites, assignments, integration settings, budgets, policies, approvals, publication, rollback and all reports.
+2. Staff: invitation/admin-created account, with only assigned websites and explicitly granted module/action permissions.
+Provide Staff templates such as Researcher, Content Editor, Reviewer and Viewer, but implement them as permission bundles rather than hard-coded role comparisons throughout the code.
+
+Permissions include: view_site, manage_site_profile, run_audit, manage_reference_sites, run_keyword_research, edit_keyword_map, generate_ai_draft, edit_draft, submit_for_review, approve_change, publish_change, rollback_change, view_analytics, export_report, manage_automation, manage_integrations, manage_users and manage_budgets.
+
+Default Staff can inspect assigned sites, run audits and create/submit drafts. Staff cannot approve, publish, rollback, manage other staff, change credentials or enable automation unless explicitly granted. Approval and publication permissions are separate. Optional policy forbids approving one's own draft. High-risk operations stay restricted by action policy even when ordinary publication is granted.
+
+Use a custom Django user model from the first migration. Use session authentication for the same-origin browser UI, CSRF protection, secure production cookies, password validators, login throttling, expiring invitations/password-reset tokens and sign-out/session invalidation. Provide a tested TOTP MFA path for privileged accounts or explicitly flag it as a release blocker if not completed; do not implement cryptography from scratch.
+
+Use Django groups/permissions with explicit organization membership and site assignments. Django is_staff means access to Django admin; it is NOT the product Staff role. Do not grant every employee is_staff or is_superuser. The company Super Admin role is an application role; a bootstrap Django superuser is a separate operational account.
+
+Enforce authorization server-side in views, serializers, queryset filtering, object access, exports, jobs, approvals, callbacks and files. Validate site IDs in request bodies, not only URL paths. Return safe 403/404 responses. Test cross-site and cross-organization access even though the first deployment serves one company.
+
+Re-check current site policy and actor authorization when executing queued publication; revoked users or permissions must not remain effective through old jobs. Pausing a site or revoking a connection blocks new writes immediately. Keep security/audit events for invitations, permission changes, logins, approvals and publications. Never log secrets.
+5. Website onboarding and configuration
+Each website must have:
+- Name, normalized URL, owned/staging/production status, verified connection and assigned staff.
+- Industry, business model, actual services/products, target audience, target countries, languages and timezone.
+- Brand voice, business facts, contact details, service areas and conversion goals.
+- Approved terminology, prohibited claims, evidence/source timestamps and brand guidelines.
+- WordPress version, theme, builder detection, active SEO ownership mode, custom post types, supported editable fields, plugin version and capability flags.
+- Reference sites with relationship: our own sample, competitor, inspiration or research source. Do not treat all supplied sites as managed publishing targets.
+- Search Console property, GA4 property and optional keyword/SERP provider configuration.
+- Crawl scope, ignored URL patterns, concurrency/page/depth limits and schedules.
+- AI model/provider selection, per-site budgets, automation mode and allowed fields.
+- Last successful connection, last crawl, last verification and data freshness.
+Provide a setup wizard, connection test, capability report and actionable configuration errors. Users can save incomplete sites and continue setup later. Never show missing connections as a successful zero-result audit.
+6. Research from user-supplied sample websites
+The user will supply website URLs later. Build the input/import UI now; do not invent actual sample domains or claim research has occurred before URLs exist. Demo fixtures must be clearly labeled.
+
+Support manual URL entry and CSV import with validation. Research jobs must:
+1. Normalize URLs and enforce network/crawl limits.
+2. Inspect allowed public pages and sitemaps, respecting robots policy and access controls; never bypass logins, challenges or paywalls.
+3. Extract titles, descriptions, headings, main text, visible service categories, URL paths, internal links and relevant structured data.
+4. Identify candidate topics, entities and keyword phrases; separate observed phrases from AI-generated suggestions.
+5. Include connected Search Console queries from the managed site, when available.
+6. Optionally enrich through an authorized keyword/SERP provider using chosen country, language and device. Implement a provider interface and CSV metrics import; missing paid access must not break basic research.
+7. Group by intent and topic, remove obvious noise, and propose a primary/secondary keyword mapping to existing or proposed pages.
+8. Identify content gaps and potential keyword cannibalization as reviewable hypotheses, not certainty.
+9. Rank opportunities using a transparent heuristic based on available evidence, business relevance and effort. Missing volume/difficulty values remain null.
+Every candidate stores source URL or API source, extraction date, locale, evidence excerpt, observed/inferred label, volume/difficulty provenance if present, target page and review status. Text occurrence on a competitor website does not prove that site ranks for a keyword. Never fabricate monthly search volume, difficulty, ranking, traffic or backlink metrics. Keyword metrics from providers are estimates and must be labeled.
+
+Do not copy competitor paragraphs into customer content. Extract limited evidence and produce original recommendations grounded in the managed business's facts. Store source provenance without retaining unlimited third-party pages. Support CSV export, manual corrections, exclusion lists, merging clusters and lockable approved mappings.
+7. Our WordPress plugin: standalone SEO plus connector
+Create an installable ZIP built from wordpress-plugin/company-seo-connector/. It must be maintainable, namespaced/prefixed, versioned and independent from the active theme. Use capability checks, validation, escaping, safe SQL where unavoidable, documented hooks, activation/deactivation handling and non-destructive uninstall defaults. Verify the exact current WordPress APIs used.
+
+The plugin has two responsibilities:
+
+A. SEO rendering/storage: store metadata locally in WordPress and render it server-side.
+B. Authenticated connector: expose narrowly scoped read/write/restore APIs to Django.
+
+Do not make frontend page rendering call Django, n8n or an LLM. Saved metadata must continue rendering when the automation platform is offline. Deactivating the plugin should not erase stored values; show the expected loss of its output when deactivated.
+7.1 Metadata and output
+Store prefixed post/term metadata and site defaults, with field-level validation and a schema version. Support:
+- SEO title distinct from visible heading/post title.
+- Meta description.
+- Canonical URL with sensible context-specific defaults and explicit overrides.
+- Robots directives with safe defaults and controlled high-risk changes.
+- Open Graph title, description, image and relevant type/URL.
+- Social card metadata.
+- Structured data built from allowlisted types and verified facts.
+- Site identity/defaults and optional rendered breadcrumbs with a supported shortcode/block/helper.
+Use WordPress title filters and proper theme title support for one title tag; use wp_head and appropriate core filters for other output. Coordinate core canonical and robots behavior so there are no duplicates or conflicting directives. Do not insert tags using client-side Alpine/JavaScript. Escape text/attributes/URLs correctly; serialize JSON-LD safely and validate shape/content. Never emit arbitrary untrusted script markup from an AI response.
+
+Support singular posts/pages/custom post types, static/blog home, taxonomy archives and paginated contexts deliberately. Define safe behavior for search, author/date archives, attachment pages and 404s. Do not globally canonicalize paginated archives to page one. Keep site-wide search visibility authoritative; the plugin must not accidentally override a staging site's privacy setting.
+
+Use/extend WordPress core sitemap capabilities initially, with tested exclusion for unpublished/private and intentionally noindex content, correct public URL output and meaningful modification dates. Avoid a second conflicting sitemap generator. Verify robots and sitemap behavior rather than rewriting a physical robots.txt file without site-specific knowledge. Hreflang output requires confirmed reciprocal translation mappings and one owner; do not infer translations from matching slugs alone.
+
+Do not implement meta keywords as a Google-ranking feature. Do not claim valid schema guarantees rich results. Use only appropriate schema types supported by visible page facts. FAQ markup eligibility and schema.org validity are different checks. Do not fabricate ratings, reviews, prices, facilities or business qualifications.
+7.2 SEO ownership and conflicts
+Expose modes: standalone renderer (default on a compatible site with no other SEO owner), external SEO owner/connector-only, and paused/read-only.
+
+Detect Yoast, Rank Math and other known SEO output providers. Default to reporting a conflict rather than outputting duplicate tags or automatically deactivating another plugin. Provide explicit administrator ownership selection and a migration preview with backups. Implement only adapters actually tested; show unsupported integrations honestly. Yoast's read-only REST endpoint must not be treated as a general write API.
+
+Inspect rendered HTML for duplicate tags and hard-coded theme output. Theme detection alone cannot prove compatibility. Unknown hard-coded output requires a developer patch; do not regex-strip arbitrary HTML through global output buffering.
+7.3 Connection security
+Use HTTPS and WordPress Application Password authentication for a dedicated user with minimum custom capabilities. Do not require a full administrator account for routine SEO writes. Default connector role must not have install_plugins, edit_themes or edit_users. Content operations additionally check the relevant WordPress object-edit capability. Separate read, metadata-write, content-write and restore capabilities.
+
+Each REST route requires a permission_callback, object-level checks, strict request schemas and bounded payload sizes. Credentials are stored encrypted server-side in Django and never sent to browser JS or AI. Do not use WordPress nonces as the sole authentication for machine-to-machine calls. The plugin settings page requires normal WP capabilities/nonces.
+
+Support rotation/revocation, connection health, redacted logs, protocol version negotiation and an emergency writes-off switch. Avoid exposing drafts or private content publicly through custom routes. Optional outbound WordPress content-change events must be signed, replay-protected, queued and bounded; frontend saves must not depend on immediate Django availability.
+7.4 Proposed API contract
+Use a versioned namespace such as company-seo/v1 and document actual responses with examples:
+- GET /capabilities: plugin/WP versions, renderer mode, builder/adapters, allowed operations.
+- GET /pages: paginated authorized content inventory.
+- GET /pages/{id}/seo: current values, effective values, provenance and revision/hash.
+- GET /pages/{id}/content-map: supported editable fields and references.
+- POST /changes/preview: validate proposed changes and return diff without writes.
+- POST /changes/apply: apply a previously approved change payload using expected revision/hash and idempotency key.
+- GET /changes/{change_id}: recover the status/result after a timeout.
+- POST /changes/{change_id}/restore: conflict-aware restoration of supported fields.
+- GET /health: authenticated diagnostics; keep any public health output minimal.
+Never expose arbitrary file read/write, SQL, PHP evaluation, shell execution or arbitrary post-meta mutation endpoints.
+
+Store a durable idempotency ledger with a unique request identifier and payload hash. Same key/same payload returns the prior result; same key/different payload fails. Handle concurrent retries with database uniqueness/locking; do not claim exactly-once execution merely because a cache lock exists. On ambiguous network failure, reconcile via change status before retrying.
+8. Custom themes and Elementor compatibility
+Use one dashboard and shared audit/review/publish pipeline with adapter routing per page. A single site may mix builders. Store both detected and selected adapter plus supported capabilities. Manual overrides must validate compatibility rather than forcing an unsafe write.
+8.1 Metadata adapter — common to both
+SEO metadata is stored separately from the visible content and emitted in the HTML head. It should work across compatible custom themes and Elementor without modifying their layout data. Verify real HTTP output, title support and relevant hooks with representative page templates including Elementor Canvas where supported.
+8.2 Standard WordPress content adapter
+Handle ordinary post_content safely through WordPress APIs. Preserve Gutenberg block structure using supported parsing/serialization. Do not replace a structured document with plain AI HTML. Provide field-level/text-only supported operations and truthful limitations for complex blocks or shortcodes.
+8.3 Custom theme/fields adapter
+Support registered editable post meta, custom post types, selected taxonomy fields and optional ACF integrations through explicit field maps. Store allowlisted field identifier, type, validation and the page/template scope. ACF is optional, never a hard dependency. Allow administrator mapping through the dashboard with connector-side validation; a field name sent by a client is not authorization.
+
+For hard-coded content in PHP templates, report code_change_required and generate a reviewable patch/task if the repository is available. Do not claim database updates can change hard-coded strings. Theme changes go through a local repository, staging verification and deployment. Never modify the same shared header.php repeatedly to set page-specific metadata.
+8.4 Elementor content adapter
+Treat Elementor as a structured document with nested elements, widget IDs, settings, dynamic references and version-dependent behavior. Metadata support is independent of body-content support.
+
+Initially support a documented allowlist of text fields in tested heading/text-editor/button widgets, preserving element IDs, layout, responsive settings, styles, links and unrelated settings. Capture the full original document snapshot plus a field-level diff. Dynamic tags, global/shared widgets, nested templates, forms, custom/third-party widgets and untested versions default to read-only/manual review. Shared elements need an impact report listing affected pages and explicit approval.
+
+Use supported Elementor document save APIs for the tested version, with post capability checks and necessary cache/CSS regeneration. Consult current official docs/source before choosing the API. Do not blindly rewrite _elementor_data or run string replacement across serialized data. If no reliable supported write path is established for a field/version, mark it unsupported and generate a manual edit task; do not simulate success.
+
+Verify with before/after screenshots and assertions that only intended text/fields changed. Keep full-document restore conflict-aware so it cannot overwrite later unrelated editor work.
+9. Audit engine and SEO feature scope
+Use deterministic checks for measurable facts; reserve AI for interpretation and drafting. Store issue code, severity, evidence, URL, detected time, rule version, remediation, confidence where relevant, status and responsible person.
+
+Technical checks: status codes; redirects/chains/loops; broken internal resources/links; crawl scope; robots directives; noindex/canonical conflicts; sitemap inventory differences; HTTPS/mixed content; missing/duplicate titles/descriptions; heading structure; image alt context and size; schema parsing/consistency; internal-link coverage; pagination; language mappings; parameter/faceted crawl traps; mobile/performance diagnostics.
+
+Orphan detection compares discovered links with independent inventories such as WordPress/sitemaps. Missing data cannot prove orphanhood. Do not equate robots blocking with guaranteed deindexing. Multiple headings, short descriptions or word counts need contextual rules rather than universal ranking claims. Decorative images may correctly use empty alt text. Avoid keyword stuffing and mechanical keyword-density targets.
+
+Content features: primary keyword map, briefs, topic clusters, gap analysis, update suggestions, readability/context review, factual checks against approved sources, internal-link proposals, image-alt drafts, structured-data proposals and multilingual drafts. Translation needs language review and verified business facts.
+
+Local SEO: business identity/contact consistency, location pages, supported business profile integration or documented manual tasks. Off-page SEO: imported/provider backlink evidence, mention tracking, outreach drafts and task management. Do not auto-buy links, mass-comment or send outreach without authorization. Lack of a data provider must appear as unavailable, not zero backlinks.
+
+E-commerce: page/product/category support and optional WooCommerce adapter with actual inventory/price source, canonical/variant rules and field-specific permissions. Never rewrite prices/stock or commercial policies through ordinary SEO drafts.
+
+International SEO: country/language targeting, reciprocal mapping validation, translation ownership and multilingual-plugin capability checks. Build extension points and clearly track any unimplemented provider adapters.
+10. Health scoring and prioritization
+Call the internal score SEO Health Score, not a Google score or ranking prediction. Use a versioned deterministic weighted rubric, initially technical crawlability 30%, on-page checks 25%, internal architecture 20%, schema consistency 10%, performance checks 15%, subject to documented applicability.
+
+Normalize only across applicable observed checks, show coverage and data freshness, and display unknown/not-applicable separately. A site with very few observed checks must not receive a misleading high-confidence score. Critical blockers remain visible regardless of aggregate score. Keep AI qualitative assessments separate.
+
+Prioritize issues using a transparent heuristic of severity, affected important pages, observed traffic/business relevance and effort. Do not invent an expected ranking uplift. A score improvement indicates rule compliance, not proven traffic growth.
+11. Business knowledge and AI behavior
+Store approved facts, services, products, source records, brand rules, forbidden claims, freshness dates and the approving user per site. Separate verified knowledge from third-party research and model suggestions. Retrieve only the relevant site's evidence. Start with structured retrieval; add pgvector only if document retrieval justifies it.
+
+AI tasks: keyword expansion/clustering, intent classification, brief generation, title/description proposals, supported content rewrites, internal-link suggestions, factual schema drafts and evidence-based summaries. Avoid unnecessary model calls for deterministic audit checks.
+
+Return typed, validated JSON using Pydantic-compatible schemas. Each proposal includes site/page identity, change type, current value/hash, proposed value, reason, source IDs, unsupported-fact flags and review requirement. Schema compliance is not truth verification. Limit output size and HTML allowlists. Never let a model choose arbitrary site IDs, credentials, shell commands or write operations.
+
+Treat crawled content and uploaded reference documents as untrusted data. They must not override system instructions, permissions, budgets, target sites or publishing policies. Strip/contain executable content; do not expose credentials to prompts. Distinguish business facts from quoted competitor claims.
+
+Use bounded retries for invalid outputs, provider timeouts, rate limits and transient errors. Record provider/model/prompt version, token usage, estimated cost and source references with sensitive-data redaction and retention controls. Enforce site/job/monthly budgets and maximum workflow steps. Cache by content hash plus business-profile/prompt/model version; invalidate when relevant context changes.
+
+Implement durable LangGraph checkpoints only after the deterministic flow works. Human review is a persisted pause/state, not a worker left running for days. Django approval state is authoritative; graph resume revalidates it and cannot bypass the publisher service. Avoid two independent approval sources. An AI reviewer never substitutes for policy-required human approval.
+12. Approval, publication, verification and recovery
+Modes: read_only, draft_only, approval_required (default), selected_auto_actions. Automatic modes are scoped to site, field type, budget and policy version. Code changes, deletion, URL/slug changes, redirects, canonical/robots changes and bulk content replacement need explicit high-risk approval. Do not let a schedule silently escalate privileges.
+
+State model: proposed -> validated -> pending_review -> approved/rejected -> queued -> applying -> applied_pending_verification -> verified/verification_failed. Include stale_conflict, retryable_failure, ambiguous_remote_result, cancelled and restoration states as needed. AI failure never becomes a successful publish.
+
+Approval binds to an immutable payload hash, target, base revision and policy version. Editing a draft invalidates its old approval. Before publication, recheck permission, policy, current remote hash, site pause state and renderer/adapter capability. Use per-page execution coordination and durable remote idempotency. A transaction in Django cannot atomically roll back a remote WordPress request; implement recovery explicitly.
+
+Snapshots capture fields, prior metadata, content/document version, relevant renderer ownership and all values needed for supported restoration. Show a readable diff and affected-page impact before approval.
+
+After apply, fetch the actual public page (with bounded cache refresh/retry), verify single intended tags, canonical/robots, selected content and no obvious error status. API 200 is not proof that the public page changed. Record delayed cache propagation separately from a permanent failure. Never mark Google ranking/indexing as verified just because HTML changed.
+
+Rollback restores only supported fields and checks that the current state matches the applied change. If another editor changed content later, require a conflict resolution path instead of overwriting it. Provide emergency pause, per-site kill switch, rollback history and a bulk operation kill switch. Test partial failures and interrupted publication.
+13. Search performance and analytics
+Integrate Google Search Console OAuth with property selection/permission checks. Fetch clicks, impressions, CTR and average position with date/query/page/country/device dimensions where available, respecting quotas, pagination and data limitations. Show freshness and source. Search Console average position is not an absolute fixed rank. Missing/omitted data is not necessarily zero; do not claim complete keyword coverage.
+
+URL Inspection is a quota-aware targeted check of Google's indexed version, not a live indexability test or an indexing request. Do not market instant indexing for normal pages. Submit/monitor sitemaps through supported methods; no general-purpose abuse of the restricted Indexing API.
+
+Integrate GA4 property selection and documented conversion/key-event mapping for enquiries, bookings and relevant clicks. Never equate every visit or button click with a confirmed sale. Configure organic channel reporting and display tracking gaps.
+
+Use PageSpeed/Lighthouse for lab diagnostics; use the current supported CrUX API path for field data where available. Verify current API responses instead of assuming PSI always includes all field data. Keep lab and field scores separate; insufficient real-user data is unavailable. Track mobile/desktop, measurement timestamp, page/origin scope and LCP/INP/CLS when available.
+
+Compare periods with consistent filters and note seasonality/data delay. Annotate changes on charts; do not claim causation from before/after traffic alone. Optional SERP tracking and backlink APIs require separate provider configuration and costs.
+14. n8n workflow deliverables and execution boundaries
+Provide runnable/importable workflow JSON for the selected pinned n8n version plus node-by-node setup instructions. Prefer standard Schedule Trigger, Webhook, HTTP Request, IF/Switch, Wait and Error Trigger nodes. Do not require obscure community nodes. Verify actual node schemas/versions in the installed instance. Valid JSON alone does not prove importability or execution.
+
+Generate these workflows:
+1. onboarding_initial_audit: authenticated site-connected event -> start audit -> wait/poll job -> surface result.
+2. scheduled_audit: schedule -> query due sites -> bounded batches -> start idempotent jobs -> collect status.
+3. daily_search_metrics: schedule -> request authorized GSC/GA4 sync -> status/report failures.
+4. reference_keyword_research: manual/scheduled request -> start reference crawl/research -> save candidates for review.
+5. content_opportunities: schedule -> eligible changed pages -> bounded drafting jobs -> review queue.
+6. approved_change_dispatch: event -> ask Django to enqueue an approved change; Django validates approval again.
+7. post_publish_verification: request verification only if not already owned by the core publisher; use one owner and deduplicate events.
+8. regression_monitor: due checks -> alerts on meaningful regressions.
+9. monthly_report: generate report -> approved internal delivery channel.
+10. workflow_error_handler: redacted error event -> Django run log/in-app notification.
+Django handles authorization, budgets, state, approval and actual publication. Celery handles heavy work and transient task retries. n8n coordinates schedules/integrations. Do not implement the same business schedule in both Celery Beat and n8n. Internal event dispatch/reconciliation is allowed without duplicating business schedules.
+
+Use one parameterized workflow per operation, passing site_id/job_id/change_id. Do not manually clone a workflow per website. Site-specific preferences and due schedules live in Django; a single n8n dispatcher can query due work. Clearly define which service owns next_due and when it advances. Handle missed schedules, overlapping runs, pause, timezone and retries.
+
+Issue scoped, revocable service credentials for n8n. Verify webhook signatures with timestamp/replay protection or use an appropriately scoped authenticated API path. A service token cannot manufacture approval. Durable event IDs, transactional outbox/inbox handling and job uniqueness prevent lost/duplicate triggers. Keep service scopes narrower than Super Admin.
+
+Document polling backoff/max duration, callback authentication, error paths and manual retry. Store correlation IDs across n8n/Django/Celery/plugin. Use internal Docker service URLs inside Compose, not localhost for other containers. Document external HTTPS webhook URLs separately.
+
+Workflow exports contain no passwords, application passwords, OAuth refresh tokens, actual secrets or user-specific credential IDs. Make required credential bindings explicit. Export inactive by default; activate only after configuration and test. Do not imply account authorization can be generated in JSON.
+
+Check the current n8n licensing terms for the actual internal agency use and any later client-facing access before deployment; do not promise unrestricted SaaS embedding or paid features for free. Keep n8n administration restricted, separate from app Staff access.
+15. Dashboard UX
+Build a cohesive responsive internal application with clear navigation, search, tables, filters, pagination, accessible dialogs, keyboard focus, loading states, empty states and error recovery. Use Alpine for local interactivity and Django-rendered forms/pages; avoid a SPA architecture hidden inside templates.
+
+Screens:
+- Login/invitation/reset/MFA screens.
+- Company overview and website cards/table.
+- Website onboarding and connection/capability diagnostics.
+- Site overview with score, critical issues, coverage, pending approvals, search data and conversion trends.
+- Page inventory and detailed evidence/snapshots.
+- Audit issues with filters, assignee, severity and history.
+- Reference websites and research runs.
+- Keyword candidates/clusters/map and provenance details.
+- Business knowledge/source management.
+- Content briefs/planner and draft editor.
+- AI recommendation diff/reason/evidence view.
+- Review queue and controlled publish/rollback screens.
+- Automation configuration, runs, logs and retry controls.
+- Search/analytics performance and change annotations.
+- Reports/exports.
+- Staff and site/action permission assignment.
+- Integration settings, budgets, policies and emergency pause.
+Show operational truth: not connected, no data, queued, running, paused, unsupported, failed and verified must look different. Never fill production charts with demo numbers. A dedicated demo mode and fixtures must have a persistent DEMO label. Human-readable validation errors must not expose stack traces or credentials.
+16. Data model and API structure
+Suggested models: User, Organization, Membership, RoleBundle, SiteAssignment, SitePermissionGrant, Site, SiteConnection, SitePolicy, BusinessProfile, KnowledgeSource, ReferenceSite, ResearchRun, Page, PageSnapshot, EditableFieldMap, CrawlRun, AuditIssue, ScoreSnapshot, KeywordCandidate, KeywordCluster, PageKeyword, ContentBrief, Recommendation, Approval, ChangeSet, PublishAttempt, RemoteChangeReceipt, VerificationResult, WorkflowRun, Job, OutboxEvent, InboxEvent, SearchMetric, ConversionMetric, PerformanceMetric, AIUsage, Report and AuditEvent.
+
+Use constraints, indexes and normalized relationships appropriate to actual queries. Avoid storing everything in an unvalidated JSON blob. JSON is suitable for versioned raw provider payloads/snapshots with validated envelopes. Scope business records to organization/site; do not leak data through reports or background jobs. Encrypted connection material must have rotation and key-management documentation. Secrets are not normal API-serializable fields.
+
+Version Django APIs under /api/v1/. Include pagination, typed validation, documented errors, request IDs and OpenAPI schema. Long jobs return 202 with job_id. Implement status polling and optionally SSE if justified; polling is sufficient initially. Disable accidental duplicate submissions with idempotency keys backed by durable constraints.
+17. Repository deliverables
+Create a coherent repository with:
+- backend/ (Django config, modular apps, migrations, templates, static sources and tests).
+- wordpress-plugin/company-seo-connector/ (PHP plugin, assets, tests and packaging instructions).
+- automation/n8n/ (versioned workflow JSON, fixture payloads and import verification notes).
+- infra/ (container files, proxy config, database initialization and optional profiles).
+- scripts/ (PowerShell and shell setup/check/backup helpers).
+- tests/fixtures/ (clearly labeled synthetic business data and WordPress pages).
+- docs/ (architecture, setup, plugin compatibility, field mapping, API contracts, n8n setup, security model, backup/restore, test evidence, status and feature matrix).
+- compose.yaml, .env.example, .gitignore, lockfiles and README.md.
+Do not commit real .env values, credentials, databases, runtime snapshots, node_modules or generated caches. Include a plugin ZIP packaging command and verify the ZIP root structure and PHP syntax.
+18. Docker, database and local development
+Default services: Django web, Celery worker, PostgreSQL, Redis, n8n and optional reverse proxy. Separate n8n database/user from app database/user. Bind development UIs to localhost by default; keep databases/Redis internal unless a documented local debug profile is used. Use health checks and startup readiness, not sleeps alone.
+
+Optional WordPress test profile must include WordPress plus its compatible MySQL/MariaDB service; WordPress does not use the app PostgreSQL database by default. Add a WP-CLI helper if useful. Fixtures should test a small custom theme and Elementor when its installation is available. Elementor Pro is optional and must not be assumed licensed.
+
+Provide idempotent scripts for preflight, environment generation, docker compose build/up, migrations, bootstrap admin, fixtures and service checks. Generate strong local secrets without printing them into logs. Do not create a fixed admin/admin account. Provide a safe one-time invitation/password setup mechanism. Clearly distinguish initial database initialization from migrations and upgrades.
+
+The PostgreSQL Docker init environment runs on first initialization only; do not promise changing .env recreates existing users/databases. Never use docker compose down -v as a routine troubleshooting step. Provide logical backup/restore commands and verify restoration in a disposable environment.
+
+Persist PostgreSQL, n8n data/encryption key and application uploads. Redis business tasks must recover via durable job records if queue messages are lost. Do not mount the Docker socket into app/n8n containers. Run with least practical privileges and do not expose secrets in image layers.
+
+Crawl SSRF protection must block loopback, private/link-local addresses, metadata endpoints, unsafe schemes and unsafe redirects, including DNS rebinding defenses. Explicit local test domains may be allowlisted only in isolated development mode; never globally disable the protection for production. Browser workers need equivalent egress protection, not only the HTTP client.
+19. Test strategy and release evidence
+Use meaningful pytest/Django tests, PHP/WordPress tests and browser smoke tests. Prioritize:
+- Authentication, invitation expiry, permission escalation, cross-site reads/writes/exports and revoked queued permissions.
+- API schemas, secrets redaction, plugin capabilities, unauthorized object updates and payload validation.
+- SSRF/redirect protection, crawl budgets, malformed HTML and reference data provenance.
+- Deterministic rule outputs and missing-data scoring.
+- AI schema/fact-source validation, invalid model output, prompt injection containment and cost limits.
+- Metadata output exactly once on representative templates, core canonical/robots coordination and plugin conflicts.
+- Elementor allowed-field changes preserving layout, unsupported-widget behavior and stale-document conflicts.
+- Approval payload immutability, concurrent requests, idempotent publication, ambiguous timeout reconciliation and safe rollback.
+- Workflow JSON import and execution against the pinned n8n version with test credentials; record unavailable account-dependent checks honestly.
+- Google provider pagination/quota/error handling through fixtures and live smoke checks only when credentials exist.
+- Clean Docker boot, migrations, restart persistence, plugin ZIP install and backup restore.
+Use small deterministic provider fixtures for repeatable tests; do not spend real AI credits on every test run. The app must visibly distinguish fixture mode from production. Do not label integrations live-tested if only mocked. List exact commands executed and outcomes in docs/STATUS.md.
+20. Milestone sequence and acceptance criteria
+M1 — Foundation: Docker, PostgreSQL, Django, Alpine/Tailwind, login, Super Admin/Staff, two-site assignment isolation and polished basic navigation. Acceptance: authorized staff sees only assigned site; clean boot/migrations and denied cross-site access are tested.
+
+M2 — Plugin and read-only audit: installable standalone plugin, authentication/capability report, page inventory, metadata storage/rendering, crawler, audit rules and evidence UI. Acceptance: local custom-theme and Elementor metadata output is verified without Yoast; conflicts are reported.
+
+M3 — Sample-site research and keywords: reference import, bounded crawl/extraction, source-backed candidates, clustering, review/map/export and external metrics interface. Acceptance: supplied/test reference pages produce traceable candidates; absent metrics remain unknown.
+
+M4 — AI/review/publication vertical slice: one live AI provider adapter, grounded title/description drafts, validated diff, approval, plugin write, public verification and rollback. Acceptance: authorized flow succeeds; stale edits/duplicate jobs fail safely; no secret reaches the model.
+
+M5 — Content adapters: ordinary content, custom-field mappings and tested Elementor text widgets. Acceptance: approved supported content edits preserve structure; unsupported cases produce tasks rather than fake success.
+
+M6 — Google analytics/performance: OAuth setup, GSC/GA4 sync, field/lab diagnostics, trends and real data-state reporting. Acceptance: fixture tests pass; live checks documented when credentials available.
+
+M7 — n8n automation: importable workflows, scoped service auth, scheduling, event delivery/retries, budgets and error UI. Acceptance: end-to-end scheduled audit and approved publish dispatch run against local services without duplicate writes.
+
+M8 — Full feature coverage and hardening: local/international/e-commerce/off-page workflows, reports, remaining supported adapters, MFA, backups, release checks and documentation. Record any provider/licensing-dependent work as blocked with exact unblock steps, never silently complete.
+
+Do not treat M4 as completion of this full project. Use it as the first reliable vertical slice, then continue through remaining scope as runtime and credentials permit. If the session ends, preserve exact progress and the next actionable task.
+21. Required manual setup guide for the owner
+Generate docs/OWNER_SETUP.md with concise Sinhala explanations plus exact commands/URLs verified for the selected versions. Cover these tasks without asking the owner to write application code:
+1. Open the project in VS Code; ensure the coding agent has workspace and permitted terminal access.
+2. Start Docker Desktop and run the project's preflight/setup scripts. Explain any WSL2/shell issues only if observed.
+3. Complete secure initial Super Admin setup; create/invite Staff and assign sites/actions.
+4. Supply actual managed URLs and sample/reference URLs separately; provide business facts, target markets and languages.
+5. Install the built custom plugin ZIP on a staging WordPress site, select SEO ownership, create the dedicated integration user/Application Password and connect through the secure settings UI.
+6. Provide at least one AI provider API credential/model selection through environment or secure settings; explain provider costs separately from the editor assistant subscription.
+7. Create/select a Google Cloud project, enable required APIs, configure OAuth consent/redirect URI, authorize the appropriate account and select verified GSC/GA4 properties. Never claim the code can bypass account authorization.
+8. Optionally configure a licensed keyword/SERP/backlink provider or import CSV metrics; basic reference keyword discovery works without paid metrics.
+9. Open local n8n, complete its owner setup, import supplied workflows, bind credentials and base URLs, test with one staging site, then activate chosen schedules. Explain test versus production webhook URLs and container versus host addresses.
+10. Configure SMTP/notification recipients only when desired; use a local mail sink for development. No surprise messages to customers.
+11. Review the first audit and change diff; verify/apply/restore a test change on staging.
+12. Configure production HTTPS/domain, secrets, backups and deployment only when explicitly ready. No real-site automation until credentials, policy and staging checks are verified.
+Include exact fields the owner must enter, expected successful screen/result, common failure diagnosis and which steps are optional. Exported n8n JSON cannot contain real connected credentials or pre-authorize Google.
+22. Final delivery and reporting rules
+For each milestone report the concrete result, important tests, known limitations, next task and any exact user setup needed. Do not repeatedly ask whether to continue ordinary implementation. Do not claim to control the user's computer merely because Docker is installed. Report terminal or network restrictions honestly.
+
+The final project handoff must include run commands, actual local URLs, secure account setup instructions, plugin ZIP location, n8n import files, manual setup checklist, supported/version-tested adapters, remaining blocked features and test results. A feature matrix must make unsupported widgets/plugins/providers obvious.
+
+Start now by inspecting the workspace and Docker environment, writing the implementation plan and creating the first working foundation milestone. Preserve this full specification throughout the build.
+END OF IMPLEMENTATION PROMPT
+Official references for implementation verification
+These establish relevant API concepts; verify versions and exact methods again during implementation.
+- WordPress head output: https://developer.wordpress.org/reference/hooks/wp_head/
+- WordPress document title filter: https://developer.wordpress.org/reference/hooks/document_title_parts/
+- WordPress REST authentication: https://developer.wordpress.org/rest-api/using-the-rest-api/authentication/
+- WordPress REST custom fields: https://developer.wordpress.org/rest-api/extending-the-rest-api/modifying-responses/
+- Elementor structured document data: https://developers.elementor.com/docs/data-structure/
+- Elementor document structure: https://developers.elementor.com/docs/data-structure/general-structure/
+- Alpine state: https://alpinejs.dev/essentials/state
+- Yoast REST read-only limitation: https://developer.yoast.com/customization/apis/rest-api/
+- Search Console API: https://developers.google.com/webmaster-tools/v1/api_reference_index
+- URL Inspection limits: https://developers.google.com/webmaster-tools/v1/urlInspection.index/inspect
+- Indexing API restrictions: https://developers.google.com/search/apis/indexing-api/v3/using-api
+- Google AI-content guidance: https://developers.google.com/search/docs/fundamentals/using-gen-ai-content
+- PageSpeed concepts: https://developers.google.com/speed/docs/insights/v5/about
+- n8n documentation: https://docs.n8n.io/
+- LangGraph: https://github.com/langchain-ai/langgraph
+- Gemini structured output: https://ai.google.dev/gemini-api/docs/structured-output
+- Codex IDE documentation: https://developers.openai.com/codex/ide/
+- Long-running implementation practices: https://developers.openai.com/blog/run-long-horizon-tasks-with-codex

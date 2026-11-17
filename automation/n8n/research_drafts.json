@@ -1,0 +1,292 @@
+{
+  "name": "SEO - URL research and review drafts",
+  "active": false,
+  "nodes": [
+    {
+      "id": "manual",
+      "name": "Manual test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "parameters",
+      "name": "Site parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "site-id",
+              "name": "site_id",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "start-public-audit",
+      "name": "Start public audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "url": "http://web:8000/api/v1/automation/research-dispatch/",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { site_id: $json.site_id, event_id: 'n8n:' + $execution.id, use_ai: true } }}"
+      }
+    },
+    {
+      "id": "wait",
+      "name": "Wait for worker",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "amount": "={{ Math.min(2 + $runIndex * 2, 10) }}",
+        "unit": "seconds"
+      },
+      "webhookId": "seo-public-audit-wait"
+    },
+    {
+      "id": "read-job-result",
+      "name": "Read job result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "url": "={{ 'http://web:8000/api/v1/automation/research/' + $('Start public audit').first().json.run_id + '/' }}",
+        "method": "GET",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "poll-condition",
+      "name": "Continue polling",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "pending",
+              "leftValue": "={{ ($json.state === 'queued' || ($json.state === 'running' || $json.state === 'drafting')) && $runIndex < 30 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "authenticated-webhook",
+      "name": "Authenticated audit request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -180
+      ],
+      "webhookId": "company-seo-research-drafts",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "company-seo-research-drafts",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "report-result",
+      "name": "Report audit result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        100
+      ],
+      "parameters": {
+        "url": "={{ 'http://web:8000/api/v1/automation/research/' + $('Start public audit').first().json.run_id + '/' }}",
+        "method": "GET",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "weekly-research",
+      "name": "Weekly evidence refresh",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        380
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 7,
+              "triggerAtHour": 6,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual test": {
+      "main": [
+        [
+          {
+            "node": "Site parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Site parameters": {
+      "main": [
+        [
+          {
+            "node": "Start public audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start public audit": {
+      "main": [
+        [
+          {
+            "node": "Wait for worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for worker": {
+      "main": [
+        [
+          {
+            "node": "Read job result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read job result": {
+      "main": [
+        [
+          {
+            "node": "Continue polling",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue polling": {
+      "main": [
+        [
+          {
+            "node": "Wait for worker",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report audit result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticated audit request": {
+      "main": [
+        [
+          {
+            "node": "Site parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly evidence refresh": {
+      "main": [
+        [
+          {
+            "node": "Site parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Colombo",
+    "saveManualExecutions": true,
+    "executionTimeout": 420
+  }
+}

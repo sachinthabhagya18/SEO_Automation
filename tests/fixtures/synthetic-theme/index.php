@@ -1,0 +1,1 @@
+<!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo('charset'); ?>"><?php wp_head(); ?></head><body><p>DEMO · SYNTHETIC LOCAL WORDPRESS FIXTURE</p><main><?php while (have_posts()) { the_post(); ?><article><h1><?php the_title(); ?></h1><?php the_content(); ?></article><?php } ?></main><?php wp_footer(); ?></body></html>
